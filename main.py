@@ -36,7 +36,7 @@ async def compile():
     return "todo"
 
 
-async def compile_dbp_source(payload):
+async def compile_dbp_source_v1(payload):
     compiler = os.path.join(config["dbp"]["path"], "Compiler", "DBPCompiler.exe")
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(os.path.join(tmpdir, "source.dba"), "wb") as f:
@@ -45,8 +45,7 @@ async def compile_dbp_source(payload):
         mm = mmap.mmap(0, 256, "DBPROEDITORMESSAGE")
         compiler_process = await asyncio.create_subprocess_exec(compiler, "source.dba", cwd=tmpdir)
         try:
-            result = await asyncio.wait_for(compiler_process.wait(), config["dbp"]["compiler_timeout"])
-            print(result)
+            await asyncio.wait_for(compiler_process.wait(), config["dbp"]["compiler_timeout"])
         except asyncio.TimeoutError:
             error_msg = mm.read().decode("utf-8")
             compiler_process.terminate()
