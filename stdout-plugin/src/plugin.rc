@@ -1,0 +1,4 @@
+STRINGTABLE 
+BEGIN
+    1 "PRINT STDOUT%S%print_stdout%String"
+END
