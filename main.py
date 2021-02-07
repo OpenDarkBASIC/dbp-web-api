@@ -31,6 +31,11 @@ async def index():
     return "hello world"
 
 
+@app.route("/v1/compile")
+async def compile():
+    return "todo"
+
+
 async def compile_dbp_source(payload):
     compiler = os.path.join(config["dbp"]["path"], "Compiler", "DBPCompiler.exe")
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -40,27 +45,31 @@ async def compile_dbp_source(payload):
         mm = mmap.mmap(0, 256, "DBPROEDITORMESSAGE")
         compiler_process = await asyncio.create_subprocess_exec(compiler, "source.dba", cwd=tmpdir)
         try:
-            await asyncio.wait_for(compiler_process.wait(), config["dbp"]["compiler_timeout"])
+            result = await asyncio.wait_for(compiler_process.wait(), config["dbp"]["compiler_timeout"])
+            print(result)
         except asyncio.TimeoutError:
-            print(mm.read().decode("utf-8"))
+            error_msg = mm.read().decode("utf-8")
             compiler_process.terminate()
-            await asyncio.sleep(2)
-            return
+            await asyncio.sleep(2)  # have to wait for the process to actually terminate, or windows won't delete tmpdir
+            return error_msg
 
-        program_process = await asyncio.create_subprocess_exec(os.path.join(tmpdir, "default.exe"), cwd=tmpdir)
+        program_process = await asyncio.create_subprocess_exec(
+            os.path.join(tmpdir, "default.exe"),
+            stdout=asyncio.subprocess.PIPE,
+            cwd=tmpdir)
         try:
             await asyncio.wait_for(program_process.wait(), config["dbp"]["program_timeout"])
+            out = await program_process.stdout.read()
+            return out.decode("utf-8")
         except asyncio.TimeoutError:
             program_process.terminate()
-            await asyncio.sleep(2)
-            return
+            await asyncio.sleep(2)  # have to wait for the process to actually terminate, or windows won't delete tmpdir
+            return f"Executable didn't terminate after {config['dbp']['program_timeout']}s"
 
 
 loop = asyncio.get_event_loop()
 try:
-    payload = dict(code="print stdout \"hello\"\n")
-    loop.run_until_complete(compile_dbp_source(payload))
-    #app.run(loop=loop, port=config["port"])
+    app.run(loop=loop, port=config["port"])
 except KeyboardInterrupt:
     pass
 except:

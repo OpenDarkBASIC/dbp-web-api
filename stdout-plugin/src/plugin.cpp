@@ -14,7 +14,7 @@ EXPORT void Destructor(void)
 {
 }
 
-void print_stdout(LPSTR pString)
+EXPORTC void print_stdout(LPSTR pString)
 {
-	puts(pString);
+    puts(pString);
 }
