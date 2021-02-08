@@ -49,18 +49,21 @@ async def compile_v1():
     if not verify_signature(payload, quart.request.headers["X-Signature-256"].replace("sha256=", "")):
         quart.abort(403)
 
-    success, output = await compile_dbp_source_v1(json.loads(payload.decode("utf-8")))
+    payload = json.loads(payload.decode("utf-8"))
+    code = payload["code"].replace("\r", "").replace("\n", "\r\n")
+    success, output = await compile_dbp_source_v1(code)
+    output = output.replace("\r\n", "\n")
     return {
         "success": success,
         "output": output
     }
 
 
-async def compile_dbp_source_v1(payload):
+async def compile_dbp_source_v1(code):
     compiler = os.path.join(config["dbp"]["path"], "Compiler", "DBPCompiler.exe")
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(os.path.join(tmpdir, "source.dba"), "wb") as f:
-            f.write(payload["code"].encode("utf-8"))
+            f.write(code.encode("utf-8"))
 
         mm = mmap.mmap(0, 256, "DBPROEDITORMESSAGE")
         compiler_process = await asyncio.create_subprocess_exec(compiler, "source.dba", cwd=tmpdir)
