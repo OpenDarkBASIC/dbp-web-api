@@ -12,6 +12,7 @@ import hashlib
 if not os.path.exists("config.json"):
     open("config.json", "wb").write(json.dumps({
         "server": {
+            "host": "0.0.0.0",
             "port": 8080,
             "secret": "token"
         },
@@ -66,7 +67,7 @@ async def compile_dbp_source_v1(payload):
         try:
             await asyncio.wait_for(compiler_process.wait(), config["dbp"]["compiler_timeout"])
         except asyncio.TimeoutError:
-            error_msg = mm.read().decode("utf-8")
+            error_msg = mm.read().decode("utf-8").strip("\n")
             compiler_process.terminate()
             await asyncio.sleep(2)  # have to wait for the process to actually terminate, or windows won't delete tmpdir
             return False, error_msg
@@ -87,7 +88,7 @@ async def compile_dbp_source_v1(payload):
 
 loop = asyncio.get_event_loop()
 try:
-    app.run(loop=loop, port=config["server"]["port"])
+    app.run(loop=loop, host=config["server"]["host"], port=config["server"]["port"])
 except KeyboardInterrupt:
     pass
 except:
