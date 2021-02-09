@@ -6,15 +6,13 @@ import sys
 import traceback
 import tempfile
 import mmap
-import hmac
-import hashlib
+
 
 if not os.path.exists("config.json"):
     open("config.json", "wb").write(json.dumps({
         "server": {
             "host": "0.0.0.0",
-            "port": 8080,
-            "secret": "token"
+            "port": 8080
         },
         "dbp": {
             "path": "<path to Dark Basic Professional (Online) root directory>",
@@ -30,28 +28,12 @@ config = json.loads(open("config.json", "rb").read().decode("utf-8"))
 app = quart.Quart(__name__)
 
 
-def verify_signature(payload, signature):
-    payload_signature = hmac.new(
-        key=config["server"]["secret"].encode("utf-8"),
-        msg=payload,
-        digestmod=hashlib.sha256).hexdigest()
-    return hmac.compare_digest(payload_signature, signature)
-
-
-@app.route("/")
-async def index():
-    return "hello"
-
-
-@app.route("/v1/compile", methods=["POST"])
-async def compile_v1():
+@app.route("/compile", methods=["POST"])
+async def do_compile():
     payload = await quart.request.get_data()
-    if not verify_signature(payload, quart.request.headers["X-Signature-256"].replace("sha256=", "")):
-        quart.abort(403)
-
     payload = json.loads(payload.decode("utf-8"))
     code = payload["code"].replace("\r", "").replace("\n", "\r\n")
-    success, output = await compile_dbp_source_v1(code)
+    success, output = await compile_dbp_source(code)
     output = output.replace("\r\n", "\n")
     return {
         "success": success,
@@ -59,7 +41,7 @@ async def compile_v1():
     }
 
 
-async def compile_dbp_source_v1(code):
+async def compile_dbp_source(code):
     compiler = os.path.join(config["dbp"]["path"], "Compiler", "DBPCompiler.exe")
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(os.path.join(tmpdir, "source.dba"), "wb") as f:
