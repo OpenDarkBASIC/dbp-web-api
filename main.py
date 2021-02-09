@@ -12,7 +12,7 @@ if not os.path.exists("config.json"):
     open("config.json", "wb").write(json.dumps({
         "server": {
             "host": "0.0.0.0",
-            "port": 8080
+            "port": 8014
         },
         "dbp": {
             "path": "<path to Dark Basic Professional (Online) root directory>",
