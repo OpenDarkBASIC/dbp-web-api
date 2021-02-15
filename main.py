@@ -26,6 +26,58 @@ if not os.path.exists("config.json"):
 
 config = json.loads(open("config.json", "rb").read().decode("utf-8"))
 app = quart.Quart(__name__)
+compiler_lock = asyncio.Lock()
+
+
+async def compile_dbp_source(code):
+    compiler = os.path.join(config["dbp"]["path"], "Compiler", "DBPCompiler.exe")
+    async with compiler_lock:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "source.dba"), "wb") as f:
+                f.write(code.encode("utf-8"))
+
+            mm = mmap.mmap(0, 256, "DBPROEDITORMESSAGE")
+            compiler_process = await asyncio.create_subprocess_exec(compiler, "source.dba", cwd=tmpdir)
+            try:
+                await asyncio.wait_for(compiler_process.wait(), config["dbp"]["compiler_timeout"])
+            except asyncio.TimeoutError:
+                error_msg = mm.read().decode("utf-8").strip("\r\n\0")
+                compiler_process.terminate()
+                await asyncio.sleep(1)  # have to wait for the process to actually terminate, or windows won't delete tmpdir
+                return False, error_msg
+
+            if not os.path.exists(os.path.join(tmpdir, "default.exe")):
+                error_msg = mm.read().decode("utf-8").strip("\r\n\0")
+                await asyncio.sleep(1)  # have to wait for the process to actually terminate, or windows won't delete tmpdir
+                return False, error_msg
+
+            program_process = await asyncio.create_subprocess_exec(
+                os.path.join(tmpdir, "default.exe"),
+                stdout=asyncio.subprocess.PIPE,
+                cwd=tmpdir)
+            try:
+                await asyncio.wait_for(program_process.wait(), config["dbp"]["program_timeout"])
+                out = await program_process.stdout.read()
+                return True, out.decode("utf-8")
+            except asyncio.TimeoutError:
+                program_process.terminate()
+                await asyncio.sleep(1)  # have to wait for the process to actually terminate, or windows won't delete tmpdir
+                return False, f"Executable didn't terminate after {config['dbp']['program_timeout']}s"
+
+
+@app.route("/update")
+async def do_update():
+    return {
+        "success": True,
+        "message": ""
+    }
+
+
+@app.route("/commmit_hash")
+async def commit_hash():
+    return {
+        "commit_hash": "0"
+    }
 
 
 @app.route("/compile", methods=["POST"])
@@ -39,37 +91,6 @@ async def do_compile():
         "success": success,
         "output": output
     }
-
-
-async def compile_dbp_source(code):
-    compiler = os.path.join(config["dbp"]["path"], "Compiler", "DBPCompiler.exe")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with open(os.path.join(tmpdir, "source.dba"), "wb") as f:
-            f.write(code.encode("utf-8"))
-
-        mm = mmap.mmap(0, 256, "DBPROEDITORMESSAGE")
-        compiler_process = await asyncio.create_subprocess_exec(compiler, "source.dba", cwd=tmpdir)
-        try:
-            await asyncio.wait_for(compiler_process.wait(), config["dbp"]["compiler_timeout"])
-        except asyncio.TimeoutError:
-            error_msg = mm.read().decode("utf-8").strip("\n")
-            compiler_process.terminate()
-            await asyncio.sleep(2)  # have to wait for the process to actually terminate, or windows won't delete tmpdir
-            return False, error_msg
-
-        program_process = await asyncio.create_subprocess_exec(
-            os.path.join(tmpdir, "default.exe"),
-            stdout=asyncio.subprocess.PIPE,
-            cwd=tmpdir)
-        try:
-            await asyncio.wait_for(program_process.wait(), config["dbp"]["program_timeout"])
-            out = await program_process.stdout.read()
-            return True, out.decode("utf-8")
-        except asyncio.TimeoutError:
-            program_process.terminate()
-            await asyncio.sleep(2)  # have to wait for the process to actually terminate, or windows won't delete tmpdir
-            return False, f"Executable didn't terminate after {config['dbp']['program_timeout']}s"
-
 
 loop = asyncio.get_event_loop()
 try:
