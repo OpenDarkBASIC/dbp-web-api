@@ -29,6 +29,14 @@ app = quart.Quart(__name__)
 compiler_lock = asyncio.Lock()
 
 
+def line_endings_to_dos(code):
+    return code.replace("\r", "").replace("\n", "\r\n")
+
+
+def line_endings_to_unix(code):
+    return code.replace("\r", "")
+
+
 async def compile_dbp_source(code):
     compiler = os.path.join(config["dbp"]["path"], "Compiler", "DBPCompiler.exe")
     async with compiler_lock:
@@ -83,14 +91,31 @@ async def commit_hash():
 @app.route("/compile", methods=["POST"])
 async def do_compile():
     payload = await quart.request.get_data()
-    payload = json.loads(payload.decode("utf-8"))
-    code = payload["code"].replace("\r", "").replace("\n", "\r\n")
+    snippet = json.loads(payload.decode("utf-8"))
+    code = line_endings_to_dos(snippet["code"])
     success, output = await compile_dbp_source(code)
-    output = output.replace("\r\n", "\n")
     return {
         "success": success,
-        "output": output
+        "output": line_endings_to_unix(output)
     }
+
+
+@app.route("/compile_multi", methods=["POST"])
+async def do_compile_multi():
+    payload = await quart.request.get_data()
+    code_snippets = json.loads(payload.decode("utf-8"))
+
+    results = list()
+    for snippet in code_snippets:
+        code = line_endings_to_dos(snippet["code"])
+        success, output = await compile_dbp_source(code)
+        results.append({
+            "success": success,
+            "output": line_endings_to_unix(output)
+        })
+
+    return quart.jsonify(results)
+
 
 loop = asyncio.get_event_loop()
 try:
