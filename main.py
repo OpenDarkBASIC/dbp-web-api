@@ -81,7 +81,7 @@ async def do_update():
     }
 
 
-@app.route("/commmit_hash")
+@app.route("/commit_hash")
 async def commit_hash():
     return {
         "commit_hash": "0"
